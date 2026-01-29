@@ -1,0 +1,45 @@
+# -----------------------------
+# Arduino / PlatformIO
+# -----------------------------
+*.ino.hex
+*.ino.bin
+*.elf
+*.map
+
+# Arduino build folders
+build/
+out/
+.pio/
+
+# -----------------------------
+# IDE / OS files
+# -----------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# -----------------------------
+# Logs & temp files
+# -----------------------------
+*.log
+*.tmp
+*.bak
+*.swp
+
+# -----------------------------
+# Secrets (DO NOT COMMIT)
+# -----------------------------
+secrets.h
+**/secrets.h
+/furnace_monitor/secrets.h
+
+# -----------------------------
+# OTHERS (DO NOT COMMIT)
+# -----------------------------
+GPT/
+repomix-output.xml
