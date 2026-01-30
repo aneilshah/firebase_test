@@ -10,7 +10,7 @@ extern int LOOP_TIME;
 extern const char* VERSION;
 extern int WIFI_ERR;
 
-#define VERBOSE 0
+#define VERBOSE 1
 #define LOG_FIREBASE 1
 
 #define OFF 0

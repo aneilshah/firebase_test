@@ -9,6 +9,7 @@
 #include "serverFunc.h"
 #include "wifiFunctions.h"
 #include "firebase.h"
+#include "diagCounters.h"
 #include "ntp.h"
 
 // Global Constants
@@ -25,7 +26,7 @@ const char* VERSION = "V0.01";
 #define  DAC_PIN 26
 #define  D1_PIN 0
 #define  ISR_PIN 35
-#define  LED_PIN 25 
+#define  LED_PIN 25
 #define  TS1_PIN 14  // Touch Switch
 
 // System States
@@ -33,7 +34,7 @@ String CONN_STATUS = "OFF";
 int LOOP_COUNT = 0;
 int LOOP_TIME = 1000;
 int ISR_CNT = 0;
-unsigned int DELAY = 96;  // avg code run time is 8ms
+unsigned int DELAY = 98;  // avg code run time is 2ms
 
 // Error Counts
 int WIFI_ERR = 0;
@@ -41,11 +42,10 @@ int FB_ERR = 0;
 
 // Hardware States
 int ADC1_COUNT = 0;
-float ADC1_VOLT = 0; 
+float ADC1_VOLT = 0;
 int BTN_VAL = 0;
 int D1_VAL = 2;
 int TS1_VAL = 0;
-
 
 void IRAM_ATTR isrFunction() {
     ISR_CNT++;
@@ -57,14 +57,9 @@ void setup()
 
     // Init ADC
     adcAttachPin(ADC1_PIN);
-    //analogSetClockDiv(255); // 1338mS
 
     // Init LED
     pinMode(LED_PIN, OUTPUT); // Set GPIO25 as digital output pin
-
-    // Init ISR
-    //pinMode(ISR_PIN, INPUT_PULLUP);
-    //attachInterrupt(ISR_PIN, isrFunction, RISING);
 
     // Init OLED
     initDisplay();
@@ -83,18 +78,16 @@ void setup()
     // NTP Time Server
     setupNTP();
 
-  // Firebase
-  if (waitForWifiStable()) {
-    Serial.println("Post-WiFi settle...");
-    ledOn();
-    delay(2000);
-    ledOff();
-    setupFirebase();
-  } else {
-    Serial.println("Deferring Firebase init to 1-minute loop");
-  }
-
-    // Test Functions
+    // Firebase
+    if (waitForWifiStable()) {
+      Serial.println("Post-WiFi settle...");
+      ledOn();
+      delay(2000);
+      ledOff();
+      setupFirebase();
+    } else {
+      Serial.println("Deferring Firebase init to 1-minute loop");
+    }
 }
 
 void loop()
@@ -105,10 +98,10 @@ void loop()
 
     loop100ms();                            // Run the 100ms loop
     if (loopCount%10 == 0) loop1Sec();      // Run the 1 sec loop
-    if (loopCount%100 == 0) loop10Sec();    // Run the 10 sec loop 
-    if (loopCount%600 == 0) loop1Min();     // Run the 1 minute loop 
-    if (loopCount%36000 == 0) loop1Hour();  // Run the 1 hour loop 
-    if (loopCount%864000 == 0) loop1Day();  // Run the 1 day loop 
+    if (loopCount%100 == 0) loop10Sec();    // Run the 10 sec loop
+    if (loopCount%600 == 0) loop1Min();     // Run the 1 minute loop
+    if (loopCount%36000 == 0) loop1Hour();  // Run the 1 hour loop
+    if (loopCount%864000 == 0) loop1Day();  // Run the 1 day loop
 
     // Complete the loop
     loopCount++;
@@ -118,13 +111,9 @@ void loop()
 }
 
 void loop100ms() {
-
     // Read Inputs
-    readDigitalButton(); 
+    readDigitalButton();
     readADC();
-
-    // Run Main Logic
-
 
     // Update Outputs
     displayText();
@@ -138,12 +127,12 @@ void loop100ms() {
 void loop1Sec() {
     static long count;
 
-    // process 1 second tasks  
+    // process 1 second tasks
     readDigital();
     readTouchSwitch();
     writeDAC();
     if (wifiOK()) updateNTP();
-    
+
     // update loop counter
     count++;
 }
@@ -151,8 +140,8 @@ void loop1Sec() {
 void loop10Sec() {
     ensureServerStarted();
 
-    // Check Event Queue
-    //flushEventQueueTask(g_eventQ, fb, eventsUrlBase);
+    // NEW: attempt to flush queued Firebase writes (max 1 per call)
+    firebaseTick10Sec();
 
     static unsigned long startTime = millis();
 }
@@ -161,19 +150,29 @@ void loop1Min() {
     // reconnect if needed
     if (!firebaseOK()) {setupFirebase(); FB_ERR++;}
     if (!wifiOK()) {connectFirebaseWifi(); WIFI_ERR++;}
-}
 
+    // NEW: generate 1 write per minute for logging/diagnostics
+    writeEventData("heartbeat");
+
+    // Log Errors
+    Serial.printf("HTTP_OK=%lu -4=%lu -6=%lu RSSI0=%lu Q=%lu\n",
+      g_diag.c[FB_HTTP_OK],
+      g_diag.c[FB_HTTP_NEG4],
+      g_diag.c[FB_HTTP_NEG6],
+      g_diag.c[WIFI_RSSI_ZERO],
+      g_diag.c[FB_QUEUE_ENQ]
+    );
+
+}
 
 void loop1Hour() {
     Serial.println();
     Serial.println("*** RUNNING 1 HOUR LOOP");
-
 }
 
 void loop1Day() {
     Serial.println();
     Serial.println("*** RUNNING 1 DAY LOOP");
-
 }
 
 void writeDAC() {
@@ -227,7 +226,6 @@ void processLoopCheck() {
    loopCount++;
 }
 
-
 void Log(String text) {
   Serial.println(text);
 }
@@ -240,7 +238,5 @@ void TLog(String text, long startTime) {
   if (LOG_TIME) Serial.println(text + String(micros()-startTime));
 }
 
-
 // Version History
 // 0.1 Initial Release
-

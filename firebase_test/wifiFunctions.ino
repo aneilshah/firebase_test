@@ -3,6 +3,7 @@
 #include "oledFunc.h"
 #include "ledFunc.h"
 #include "secrets.h"
+#include "diagCounters.h"
 #include <lwip/inet.h>   // for INADDR_NONE (ESP32)
 #include <time.h>
 #include <WiFiClientSecure.h>
@@ -41,9 +42,11 @@ bool syncTime(uint32_t timeoutMs = 15000) {
     delay(500);
   }
 
+  // NTP Failed
   Serial.println("\nNTP sync FAILED");
   Serial.print("Invalid Epoch time: ");
   Serial.println((long)time(nullptr));
+  diagInc(NTP_INVALID);
   return false;
 }
 

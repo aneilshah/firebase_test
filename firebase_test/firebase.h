@@ -5,3 +5,6 @@ void setupFirebase(bool showDisplay = true);
 void writeFirebaseData();
 void writeEventData(String eventText);
 int firebaseOK();
+
+// NEW: call from loop10Sec()
+void firebaseTick10Sec();

@@ -23,7 +23,7 @@ static FirebaseClient fbClient;
 static TestFBRepo testRepo(fbClient);
 
 // -----------------------------------------------------------------------------
-// Public API (must match test_firebase/firebase.h)
+// Public API
 // -----------------------------------------------------------------------------
 int firebaseOK() {
   return testRepo.firebaseOK();
@@ -35,6 +35,11 @@ void writeFirebaseData() {
 
 void writeEventData(String eventText) {
   testRepo.writeEventData(eventText);
+}
+
+// NEW: lightweight queue flush hook (call every ~10 sec)
+void firebaseTick10Sec() {
+  testRepo.tickEventQueue();
 }
 
 // -----------------------------------------------------------------------------

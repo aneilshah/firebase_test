@@ -1,5 +1,6 @@
 #include "FirebaseClient.h"
 #include "global.h"
+#include "diagCounters.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
@@ -53,6 +54,7 @@ bool FirebaseClient::begin(const char* apiKey, const char* dbUrl) {
   if (!Firebase.ready()) {
     // errorReason() returns Arduino String in most builds; if not, .c_str() still works
     lastErr = fbdo.errorReason();
+    lastHttp = fbdo.httpCode();
     if (lastErr.length() == 0) lastErr = "Firebase not ready (token/DNS/TLS)";
   }
 
@@ -105,7 +107,7 @@ bool FirebaseClient::writeString(const String& base, const char* field, const St
 
 bool FirebaseClient::writeJSON(const String& path, FirebaseJson& json) {
   String out = "";
-  //json.toString(out, true);
+  // json.toString(out, true);
 
   static unsigned long lastOkMs = 0;
   unsigned long sinceLastOk = lastOkMs ? (millis() - lastOkMs) : 0;
@@ -115,23 +117,47 @@ bool FirebaseClient::writeJSON(const String& path, FirebaseJson& json) {
   bool ok = Firebase.RTDB.setJSON(&fbdo, path, &json);
   unsigned long dt = millis() - t0;
 
+  // Link health counters (your existing logic)
+  if (WiFi.status() != WL_CONNECTED) {
+    diagInc(WIFI_DOWN);
+    lastErr = "wifi not connected";
+    lastHttp = -100;
+    return false;
+  }
+
+  if (WiFi.RSSI() == 0) {
+    diagInc(WIFI_RSSI_ZERO);
+  }
+
   if (ok) {
+    lastHttp = fbdo.httpCode();      // NEW: cache http code
+    diagInc(FB_HTTP_OK);             // NEW: count success
+
     if (dt > 5000) {
       if (LOG_FIREBASE) dumpNetAndMem("FB SLOW OK", sinceLastOk, dt);
     }
 
+    if (LOG_FIREBASE) Serial.printf(
+      "FB OK dt=%lums since=%lums WiFi=%d RSSI=%d http=%d\n",
+      dt, sinceLastOk, (int)WiFi.status(), (int)WiFi.RSSI(), lastHttp
+    );
 
-    if (LOG_FIREBASE) Serial.printf("FB OK dt=%lums since=%lums WiFi=%d RSSI=%d http=%d\n",
-              dt, sinceLastOk, (int)WiFi.status(), (int)WiFi.RSSI(), fbdo.httpCode());
     lastOkMs = millis();
     return true;
   }
 
   // ELSE ERROR
-
   lastErr = fbdo.errorReason();
   int code = fbdo.httpCode();
-  if (LOG_FIREBASE) Serial.printf("FB writeJSON FAIL (%lums) http=%d err=%s\n", dt, code, lastErr.c_str());
+  lastHttp = code;                   // NEW: cache http code
+
+  // NEW: classify failure codes
+  if (code == -4)      diagInc(FB_HTTP_NEG4);
+  else if (code == -6) diagInc(FB_HTTP_NEG6);
+  else                 diagInc(FB_OTHER);   // if you keep a generic bucket
+
+  if (LOG_FIREBASE) Serial.printf("FB writeJSON FAIL (%lums) http=%d err=%s\n",
+                                  dt, code, lastErr.c_str());
   if (LOG_FIREBASE) dumpNetAndMem("FB FAIL", sinceLastOk, dt);
 
   // Transport failure: force reconnect + retry once
@@ -143,21 +169,34 @@ bool FirebaseClient::writeJSON(const String& path, FirebaseJson& json) {
     ok = Firebase.RTDB.setJSON(&fbdo, path, &json);
     dt = millis() - t0;
 
-    if (ok) {    
-    if (LOG_FIREBASE) Serial.printf("FB Retry OK dt=%lums since=%lums WiFi=%d RSSI=%d http=%d\n",
-              dt, sinceLastOk, (int)WiFi.status(), (int)WiFi.RSSI(), fbdo.httpCode());
+    if (ok) {
+      lastHttp = fbdo.httpCode();    // NEW
+      diagInc(FB_HTTP_OK);           // NEW (counts success on retry too)
+
+      if (LOG_FIREBASE) Serial.printf(
+        "FB Retry OK dt=%lums since=%lums WiFi=%d RSSI=%d http=%d\n",
+        dt, sinceLastOk, (int)WiFi.status(), (int)WiFi.RSSI(), lastHttp
+      );
       lastOkMs = millis();
       return true;
     }
 
     lastErr = fbdo.errorReason();
+    lastHttp = fbdo.httpCode();      // NEW
+
+    // NEW: classify retry failure too
+    if (lastHttp == -4)      diagInc(FB_HTTP_NEG4);
+    else if (lastHttp == -6) diagInc(FB_HTTP_NEG6);
+    else                     diagInc(FB_OTHER);
+
     if (LOG_FIREBASE) Serial.printf("FB writeJSON RETRY FAIL (%lums) http=%d err=%s\n",
-                  dt, fbdo.httpCode(), lastErr.c_str());
+                                    dt, lastHttp, lastErr.c_str());
     if (LOG_FIREBASE) dumpNetAndMem("FB Retry FAIL", sinceLastOk, dt);
   }
 
   return false;
 }
+
 
 // Optional convenience exposure
 const String& FirebaseClient::mkKeyPublic(const String& base, const char* field) {

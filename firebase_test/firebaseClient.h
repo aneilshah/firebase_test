@@ -10,6 +10,9 @@ public:
   bool ready() const;
   String lastError() const;
 
+  // NEW: last HTTP code from the most recent Firebase call
+  int lastHttpCode() const { return lastHttp; }
+
   // Existing APIs (kept)
   bool writeInt(const String& path, int v);
   bool writeFloat(const String& path, float v);
@@ -34,5 +37,9 @@ private:
   FirebaseConfig config;
   bool initialized = false;
   String lastErr;
+
+  // NEW: cached http code from last operation (success or failure)
+  int lastHttp = 0;
+
   String _keyBuf;
 };

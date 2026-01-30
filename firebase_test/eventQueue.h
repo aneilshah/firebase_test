@@ -4,12 +4,14 @@
 #include <Arduino.h>
 
 #define DATA_SIZE 240
+#define PATH_SIZE 120
 
 class EventQueue {
 public:
-  static constexpr uint8_t kCapacity = 3;
+  static constexpr uint8_t kCapacity = 50;
 
   struct Item {
+    char path[PATH_SIZE];          // Firebase RTDB path for this payload
     char data[DATA_SIZE];          // JSON payload string
     unsigned long createdLoop = 0; // loopCount when enqueued
     uint8_t retries = 0;
@@ -23,6 +25,7 @@ public:
     _head = 0;
     _tail = 0;
     for (uint8_t i = 0; i < kCapacity; i++) {
+      _items[i].path[0] = '\0';
       _items[i].data[0] = '\0';
       _items[i].createdLoop = 0;
       _items[i].retries = 0;
@@ -35,21 +38,21 @@ public:
   bool empty() const { return _count == 0; }
   bool full() const { return _count == kCapacity; }
 
-  // Add a JSON string to the queue.
+  // Add (path + JSON) to the queue.
   // If full, drops oldest first.
-  // Returns false only if jsonStr is too large.
-  bool enqueue(const String& jsonStr, unsigned long loopCount) {
-    // Need room for null terminator
-    if (jsonStr.length() >= DATA_SIZE) {
-      return false; // too large, reject (don't truncate JSON)
-    }
+  // Returns false only if path/json are too large.
+  bool enqueue(const String& pathStr, const String& jsonStr, unsigned long loopCount) {
+    if (pathStr.length() >= PATH_SIZE) return false; // too large
+    if (jsonStr.length() >= DATA_SIZE) return false; // too large (don't truncate JSON)
 
-    if (full()) {
-      dropOldest();
-    }
+    if (full()) dropOldest();
 
     Item& slot = _items[_tail];
+
+    slot.path[0] = '\0';
     slot.data[0] = '\0';
+
+    pathStr.toCharArray(slot.path, PATH_SIZE);
     jsonStr.toCharArray(slot.data, DATA_SIZE);
 
     slot.createdLoop = loopCount;
@@ -66,6 +69,7 @@ public:
     if (empty()) return false;
 
     Item& slot = _items[_head];
+    slot.path[0] = '\0';
     slot.data[0] = '\0';
     slot.createdLoop = 0;
     slot.retries = 0;
@@ -104,7 +108,7 @@ public:
 
 private:
   Item _items[kCapacity];
-  uint8_t _count = 0;
-  uint8_t _head = 0; // oldest
-  uint8_t _tail = 0; // next insert
+  uint16_t _count = 0;
+  uint16_t _head = 0; // oldest
+  uint16_t _tail = 0; // next insert
 };

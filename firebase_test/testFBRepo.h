@@ -11,8 +11,12 @@ public:
   void clearDailyFBWriteCount();
   int firebaseOK();
 
+  // Call this from loop10Sec(): flushes at most ONE queued item per call.
+  void tickEventQueue();
+
 private:
   void writeLog(const String& url, bool writeDailyData);
+  void queueJsonOrDrop(const String& url, class FirebaseJson& json);
 
   FirebaseClient& fb;
   int writesToday = 0;
